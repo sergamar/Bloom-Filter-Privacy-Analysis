@@ -3,7 +3,18 @@ import sys
 import getopt
 from BloomFilter import BloomFilter
 from GenericHashFunctionsSHA512 import GenericHashFunctionsSHA512
+from Heuristics import *
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
+# Testing parameters
+filter_size = 64
+k = 4
+n = 16
+max_val = 100000
+falses = 64
 
 # Function to generate the random set of elements.
 # Current version uses strings
@@ -41,8 +52,39 @@ def generate_random_elements(num, bf=None, ds=None, max_val=1000000000, exclude=
         stored = stored + 1
         # Add it to the set so they are not repeated
         s.add(entry)
-
     return
+
+# Function to generate a random set of false positives
+# num is the number of false positives to generate
+# bf is the BloomFilter in which to test the elements to find false positives
+# maxVal is the maximum int value
+# exclude set are a elements that should not be selected (basically true positives)
+# returns a list with the generated false positives
+def generate_random_fp(num, bf, max_val=1000000000, exclude=None):
+    # Elements are added to the set to check for repetitions
+    if exclude is None:
+        exclude = set()
+    s = set()
+    s.clear()
+
+    # Keeps data of stored elements
+    stored = 0
+    false_positives = []
+    # Generate elements until the value "stored" is reached
+    while stored < num:
+        # Generate integers between 1 and max_val
+        entry = random.randint(1, max_val)
+        # if entry was already selected or is in the exclude set,
+        # go to next iteration
+        if entry in s or entry in exclude or not bf.check(entry):
+            continue
+        # When an BloomFilter is received
+        false_positives.append(entry)
+        # Another element has been stored
+        stored = stored + 1
+        # Add it to the set so they are not repeated
+        s.add(entry)
+    return false_positives
 
 # Function to find all elements from the universe that returns a positive from CBF
 # bf is the Bloom Filter
@@ -93,8 +135,9 @@ def clear_positions(elements, positives, count_bf, count, hashf, k):
 # m is the number of positions (counters) of the BF
 # k is the number of hash functions
 # bf is the Bloom Filter
-# p is the P array with all the elements from the universe that returned positive from BF
-def probabilistic_peeling(m, k, bf, p):
+# p is the P array with the true positives and the generated false positives
+# h is the heuristic used to guess more elements of the filter
+def probabilistic_peeling(m, k, bf, p, h):
     # Retrieve the hash function used
     hashf = bf.get_hash()
     # T array  with m positions to store the elements that are mapped to them
@@ -121,8 +164,8 @@ def probabilistic_peeling(m, k, bf, p):
 
     # Set that will store the positives that were extracted from the filter
     safe_positives = set()
-    # Set that will store the positives that are not 100% certain
-    unsafe_positives = set()
+    # Array that will store only the positives we can't be 100% sure they are in the filter
+    possible_positives = p.copy()
 
     # Values for the BF counters
     counters = bf.get_counters()
@@ -144,37 +187,59 @@ def probabilistic_peeling(m, k, bf, p):
         found = True
         # add the elements of the ith position to the positives
         safe_positives.update(elements[i])
-
-        # TODO: Try to get more elements using heuristics
+        # and remove them from the list of dubious positives
+        if elements[i][0] in possible_positives:
+            possible_positives.remove(elements[i][0])
+    unsafe_positives = set(h(bf, possible_positives, safe_positives, elements, n))
 
     # return elements that were retrieved from the BF
-    return safe_positives
+    return safe_positives, unsafe_positives
 
+x_axis = []
+y_axis = []
 
-# Testing parameters
-filter_size = 1024
-hashes = 3
-elements = 10
-max_val = 100000
+for falses in range(1, falses+1):
+    avg = 0
+    for _ in range(100):
+        # Generate a standard bloom filter with the testing parameters
+        bf = BloomFilter(filter_size, k)
 
-# Generate a standard bloom filter with the testing parameters
-bf = BloomFilter(filter_size, hashes)
+        # Fill the filter with random elements
+        true_positives = []
+        generate_random_elements(n, bf, true_positives, max_val)
+        # print(true_positives)
 
-# Fill the filter with random elements
-true_positives = []
-generate_random_elements(elements, bf, true_positives, max_val)
-print(true_positives)
+        # Generate a certain number of false positives
+        false_positives = generate_random_fp(falses, bf, max_val, true_positives)
 
-# Get all the elements from the universe that are identified by the filter
-positives = find_p(bf, max_val)
-print(positives)
+        # Get all the elements from the universe that are identified by the filter
+        # positives = find_p(bf, max_val)
+        # print('All positives:', positives)
 
-# Run the algorithm
-found = probabilistic_peeling(filter_size, hashes, bf, positives)
-print(found)
+        # Run the algorithm
+        all_positives = true_positives + false_positives
+        # We shuffle them not to get true positives just by getting the first ones in the array
+        random.shuffle(all_positives)
+        sure_positives, guessed_positives = probabilistic_peeling(filter_size, k, bf, all_positives, h_number_of_neighbours)
+        # print(sure_positives, guessed_positives)
 
-print("Found percentage: ", len(found)/len(true_positives)*100, "%")
+        prediction = sure_positives.union(guessed_positives)
 
+        avg += len(set(true_positives).intersection(prediction))/n
+        # print("Found percentage: ", len(set(true_positives).intersection(prediction))/len(true_positives)*100, "%")
+    x_axis.append(falses/n)
+    y_axis.append(avg)
+
+plt.xlabel('Ratio False positives/True positives')
+plt.ylabel('% of successfully obtained elements')
+plt.title('m='+str(filter_size)+', '+'k='+str(k)+', '+'n='+str(n))
+plt.yticks([0,20,40,60,80,100])
+plt.ylim(bottom=0)
+plt.xlim(left=0)
+plt.xlim(right=4.25)
+plt.grid()
+plt.plot(x_axis, y_axis)
+plt.savefig('m_'+str(filter_size)+'_k_'+str(k)+'_n_'+str(n)+'_h_1.png')
 
 
 

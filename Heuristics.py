@@ -14,7 +14,7 @@ from BloomFilter import BloomFilter
 def h_number_of_neighbours(bf, p, tp, e, n):
     # If we already have more than the expected number of elements, we don't do anything
     if len(tp) >= n:
-        return tp
+        return set()
     # We calculate the value of the heuristic for each element in p
     heuristics = {}
     for element in list(p):
@@ -52,7 +52,7 @@ def h_number_of_tp(bf, p, tp, e, n):
                 # We don't take the already found tp into account
                 if element in tp:
                     continue
-                heuristics[element] = 1
+                heuristics[element] += 1
     # We sort them and get the n-len(tp) elements with less heuristic that will be the predicted tp by the heuristic
     sorted_elements = sorted(heuristics, key=heuristics.get)
-    return tp + sorted_elements[:n-len(tp)]
+    return sorted_elements[:n-len(tp)]
