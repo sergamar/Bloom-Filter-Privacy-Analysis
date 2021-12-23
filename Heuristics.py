@@ -40,19 +40,66 @@ def h_number_of_tp(bf, p, tp, e, n):
     # If we already have more than the expected number of elements, we don't do anything
     if len(tp) >= n:
         return tp
-    # We calculate the value of the heuristic for each element in tp, but in this heuristic
-    # we should iterate through the tp and modifying the values of the heuristic of the rest
-    # of the elements
-    heuristics = {}
-    for element in p:
-        heuristics[element] = 0
-    for true_positive in list(tp):
-        for i in range(bf.nhash):
-            for element in e[bf.get_hash().getbit_idx(true_positive, i)]:
-                # We don't take the already found tp into account
-                if element in tp:
+    fps = []
+    new_tps = []
+    # We initialize two counters for each position, one for keeping track of true positives and
+    # another to keep track of the false positives. Also, we update it with the tp already found
+    # by Bianchi's method
+    tp_counters = [0] * len(e)
+    fp_counters = [0] * len(e)
+    total_counters = [0] * len(e)
+    for i, elements in enumerate(e):
+        if not elements:
+            continue
+        total_counters[i] = len(elements)
+    for found_tp in tp:
+        for i, elements in enumerate(e):
+            if not elements:
+                continue
+            if found_tp in elements:
+                tp_counters[i] += 1
+                elements.remove(found_tp)
+                total_counters[i] -= 1
+
+    # We take the elements that most true positives neighbours in all their positons have as false positives
+    # Then, we try to extract new tps by Bianchi's method. We iterate until we find the required number of tps
+    while len(new_tps) < n - len(tp) and not all(c == 0 for c in total_counters):
+        heuristics = {}
+        for i, elements in enumerate(e):
+            if not elements:
+                continue
+            for element in elements:
+                if element not in heuristics:
+                    heuristics[element] = tp_counters[i]
+                else:
+                    heuristics[element] += tp_counters[i]
+        maximum = max(heuristics.values())
+        to_be_fp = [fp for fp,v in heuristics.items() if v == maximum]
+        for fp in to_be_fp:
+            for i, elements in enumerate(e):
+                if not elements:
                     continue
-                heuristics[element] += 1
-    # We sort them and get the n-len(tp) elements with less heuristic that will be the predicted tp by the heuristic
-    sorted_elements = sorted(heuristics, key=heuristics.get)
-    return sorted_elements[:n-len(tp)]
+                if fp in elements:
+                    elements.remove(fp)
+                    fp_counters[i] += 1
+                    total_counters[i] -= 1
+        fp_counters += to_be_fp
+        to_be_tps = []
+        for i, elements in enumerate(e):
+            if not elements:
+                continue
+            if len(elements) == 1:
+                to_be_tps.append(elements[0])
+                elements.remove(elements[0])
+                total_counters[i] = 0
+        for to_be_tp in to_be_tps:
+            for i, elements in enumerate(e):
+                if not elements:
+                    continue
+                if to_be_tp in elements:
+                    elements.remove(to_be_tp)
+                    tp_counters[i] = 1
+                    total_counters[i] -= 1
+        new_tps += to_be_tps
+
+    return new_tps

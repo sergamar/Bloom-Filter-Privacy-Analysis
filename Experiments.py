@@ -220,7 +220,7 @@ for falses in range(1, falses+1):
         all_positives = true_positives + false_positives
         # We shuffle them not to get true positives just by getting the first ones in the array
         random.shuffle(all_positives)
-        sure_positives, guessed_positives = probabilistic_peeling(filter_size, k, bf, all_positives, h_number_of_neighbours)
+        sure_positives, guessed_positives = probabilistic_peeling(filter_size, k, bf, all_positives, h_number_of_tp)
         # print(sure_positives, guessed_positives)
 
         prediction = sure_positives.union(guessed_positives)
@@ -239,7 +239,7 @@ plt.xlim(left=0)
 plt.xlim(right=4.25)
 plt.grid()
 plt.plot(x_axis, y_axis)
-plt.savefig('m_'+str(filter_size)+'_k_'+str(k)+'_n_'+str(n)+'_h_1.png')
+plt.savefig('m_'+str(filter_size)+'_k_'+str(k)+'_n_'+str(n)+'_h_2.png')
 
 
 
