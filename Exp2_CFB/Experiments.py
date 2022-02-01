@@ -13,6 +13,7 @@ k = 3
 n = 14870
 max_val = 100000
 falses = n * 4
+trials = 100
 
 # Function to generate the random set of elements.
 # Current version uses strings
@@ -158,7 +159,7 @@ y_axis = []
 
 for fals in range(1, falses+1):
     avg = 0
-    for _ in range(100):
+    for _ in range(trials):
         # Generate a standard bloom filter with the testing parameters
         bf = CountingBloomFilter(filter_size, k)
 
@@ -189,7 +190,7 @@ for fals in range(1, falses+1):
         avg += len(found_tps)/len(true_positives)
 
     x_axis.append(fals/n)
-    y_axis.append(avg)
+    y_axis.append(avg/trials*100)
 
 plt.xlabel('Ratio False positives/True positives')
 plt.ylabel('% of successfully obtained elements')
@@ -200,8 +201,6 @@ plt.xlim(left=0)
 plt.xlim(right=4.25)
 plt.grid()
 plt.plot(x_axis, y_axis)
-estimated = [1/(x_value+1)*100 for x_value in x_axis]
-plt.plot(x_axis, estimated)
 plt.savefig('initial_test_65536.png')
 
 
