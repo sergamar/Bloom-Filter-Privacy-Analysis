@@ -6,14 +6,17 @@ from GenericHashFunctionsSHA512 import GenericHashFunctionsSHA512
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import time
 
 # Testing parameters
 filter_size = 65536
+# filter_size = 16384
 k = 3
 n = 14870
+# n = 3718
 max_val = 100000
 falses = n * 4
-trials = 100
+trials = 1
 
 # Function to generate the random set of elements.
 # Current version uses strings
@@ -157,8 +160,11 @@ def test_element(element, bf, positives_set, removals):
 x_axis = []
 y_axis = []
 
-for fals in range(1, falses+1):
+dots = [x*(n//10) for x in range(0,51)]
+
+for fals in dots:
     avg = 0
+    print("FPs:", fals)
     for _ in range(trials):
         # Generate a standard bloom filter with the testing parameters
         bf = CountingBloomFilter(filter_size, k)
@@ -171,11 +177,13 @@ for fals in range(1, falses+1):
         # Generate a certain number of false positives
         false_positives = generate_random_fp(fals, bf, max_val, true_positives)
 
+        print("Start:", time.ctime(time.time()))
         # Run the algorithm
         all_positives = true_positives + false_positives
         all_positives_set = set(all_positives)
         found_tps = []
         new_tp_found = True
+        rounds = 0
         while new_tp_found:
             new_tp_found = False
             removals = set()
@@ -187,10 +195,17 @@ for fals in range(1, falses+1):
                     found_tps.append(pos)
                     new_tp_found = True
             all_positives_set = all_positives_set - removals
+            rounds += 1
+        print("Rounds:", rounds)
         avg += len(found_tps)/len(true_positives)
+        print("Finish:", time.ctime(time.time()))
 
     x_axis.append(fals/n)
     y_axis.append(avg/trials*100)
+
+
+print(x_axis)
+print(y_axis)
 
 plt.xlabel('Ratio False positives/True positives')
 plt.ylabel('% of successfully obtained elements')
