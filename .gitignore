@@ -130,3 +130,6 @@ dmypy.json
 
 # PNG images
 *.png
+
+# Results
+*.results

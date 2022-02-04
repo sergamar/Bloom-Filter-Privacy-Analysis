@@ -7,16 +7,25 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import time
+import argparse
 
 # Testing parameters
-filter_size = 65536
-# filter_size = 16384
-k = 3
-n = 14870
-# n = 3718
+# filter_size = 1024
+# k = 4
+# n = 175
+# trials = 100
 max_val = 100000
-falses = n * 4
-trials = 1
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-m", dest="m", type=int, help="Filter size (default 1024)", default=1024)
+parser.add_argument("-n", dest="n", type=int, help="Number of true positives (default 256)", default=256)
+parser.add_argument("-t", dest="t", type=int, help="Number of iterations (default 100)", default=100)
+parser.add_argument("-k", dest="k", type=int, help="Number of hashes (default 3)", default=3)
+args = parser.parse_args()
+filter_size = args.m
+n = args.n
+trials = args.t
+k = args.k
 
 # Function to generate the random set of elements.
 # Current version uses strings
@@ -118,6 +127,115 @@ def find_p_set(bf, set):
 
     return p
 
+# Function that clears the element from its positions in T and also clears all the related false positives
+# elements is the T array
+# positives is the list of elements to be removed
+# count_cbf is the list of counters from the CBF
+# count is the list of counters from T
+# hashf is the hash function used in the CBF
+# k is the number of positions
+# is_positive indicates if it is a real positive (true) or a false positive (false)
+def clear_positions(elements, positives, count_cbf, count, hashf, k, is_positive):
+    # Additional elements to be removed
+    additional = list()
+    # and iterate over them
+    num = len(positives)
+
+    # Traverse the positives list
+    for i in range(num):
+        # get next element to be removed
+        next_positive = positives[i]
+        # for the k hash functions
+        for j in range(k):
+            # Get the position mapped for the element and the jth hash function
+            jpos = hashf.getbit_idx(next_positive, j)
+            # Element might have been removed in a different level of recursion
+            if elements[jpos].count(next_positive) == 0:
+                break
+            # Remove the element from the position
+            elements[jpos].remove(next_positive)
+            # Reduce the T counter for that position
+            count[jpos] -= 1
+            # Reduce the CBF counter only when it is a real positive
+            if is_positive:
+                count_cbf[jpos] -= 1
+            # If no more elements are mapped to this position in the CBF
+            # we can remove all the pending elements from T and they are false positives
+            if count_cbf[jpos] == 0 and count[jpos] != 0:
+                # Add those elements to additional list
+                additional.extend(elements[jpos])
+
+    # Recursive call to remove the false positive elements
+    if len(additional) > 0:
+        # Pass False as last parameter as they are false positives
+        clear_positions(elements, additional, count_cbf, count, hashf, k, False)
+
+    return
+
+# Get the set of elements from the Universe (1 to maxVal) that may be included into the filter.
+# m is the number of positions (counters) of the CBF
+# k is the number of hash functions
+# cbf is the Counting Bloom Filter
+# p is the P array with all the elements from the universe that returned positive from CBF
+def peeling(m, k, cbf, p):
+    # Retrieve the hash function used
+    hashf = cbf.get_hash()
+    # T array  with m positions to store the elements that are mapped to them
+    elements = [None] * m
+    # Count of elements mapped to each position
+    count = [0] * m
+
+    # For all the positions in p
+    for i in range(len(p)):
+        # for the k hash functions
+        for j in range(k):
+            # Get the position mapped for the element p[i] and the jth hash function
+            pos = hashf.getbit_idx(p[i], j)
+            # Retrieve the position pos of the T array
+            list_pos = elements[pos]
+            # If no elements are assigned to that position, create a list and assign it
+            if list_pos is None:
+                list_pos = list()
+                elements[pos] = list_pos
+            # Include the element into the list of elements mapped to the position
+            list_pos.append(p[i])
+            # Increase the count of elements mapped to the position
+            count[pos] += 1
+
+    # Set that will store the positives that were extracted from the filter
+    positives = set()
+    # Values for the CBF counters
+    counters = cbf.get_counters()
+
+    while True:
+        # If we found an element that could be extracted in this iteration
+        found = False
+        # Go through the m positions
+        # TODO: exclude positions that were 0 in the previous iterations to speed up the process
+        for i in range(m):
+            # when the ith position does not have values, go to next position
+            if count[i] == 0:
+                continue
+            # the position has values => it is not empty
+            # we only want those positions where we have the same number of elements in T and CBF
+            if count[i] != counters[i]:
+                continue
+            # we found at least one position
+            found = True
+            # add the elements of the ith position to the positives
+            positives.update(elements[i])
+            # all these elements must be removed as well, but not from elements
+            removers = elements[i].copy()
+            # call the function that clears the removers and related false positives
+            # pass True as last parameter as they are real positives
+            clear_positions(elements, removers, counters, count, hashf, k, True)
+        # if no new positives were found in the iteration, we should finish the algorithm
+        if not found:
+            break
+
+    # return elements that were retrieved from the CBF
+    return positives
+
 # Function that decides whether an posible true positive (by removing it and doing
 # some checkings with the rest of the positives) is really a true positive or unknown
 # Returns True when it is a tp, False if unknown
@@ -158,14 +276,23 @@ def test_element(element, bf, positives_set, removals):
         return False
 
 x_axis = []
-y_axis = []
+y1_axis = []
+y2_axis = []
+y3_axis = []
+y4_axis = []
 
-dots = [x*(n//10) for x in range(0,51)]
+dots = [(x*n)//10 for x in range(0,51)]
 
+f = open(str(filter_size) + '_' + str(k) + '_' + str(n) + '.results', 'w')
+f.write("Start: " + time.ctime(time.time()) + "\n")
 for fals in dots:
-    avg = 0
-    print("FPs:", fals)
+    avg_blackbox = 0
+    worst_blackbox = 100
+    avg_whitebox = 0
+    worst_whitebox = 100
     for _ in range(trials):
+        # First we proceed with the blackbox analysis
+
         # Generate a standard bloom filter with the testing parameters
         bf = CountingBloomFilter(filter_size, k)
 
@@ -177,7 +304,6 @@ for fals in dots:
         # Generate a certain number of false positives
         false_positives = generate_random_fp(fals, bf, max_val, true_positives)
 
-        print("Start:", time.ctime(time.time()))
         # Run the algorithm
         all_positives = true_positives + false_positives
         all_positives_set = set(all_positives)
@@ -196,16 +322,44 @@ for fals in dots:
                     new_tp_found = True
             all_positives_set = all_positives_set - removals
             rounds += 1
-        print("Rounds:", rounds)
-        avg += len(found_tps)/len(true_positives)
-        print("Finish:", time.ctime(time.time()))
+        # Record the results
+        prct_obtained = (len(found_tps)/len(true_positives)) * 100
+        avg_blackbox += prct_obtained/trials
+        if prct_obtained < worst_blackbox:
+            worst_blackbox = prct_obtained
+
+        # Then, we carry out the whitebox analysis
+        # Generate a new CFB with the same data
+        bf = CountingBloomFilter(filter_size, k)
+        for posit in true_positives:
+            bf.add(posit)
+        found_tps = peeling(filter_size, k, bf, all_positives)
+        prct_obtained = (len(found_tps)/len(true_positives)) * 100
+        avg_whitebox += prct_obtained/trials
+        if prct_obtained < worst_whitebox:
+            worst_whitebox = prct_obtained
+
+    print("FPs:", fals, "Avg Blackbox:", avg_blackbox, "Worst Blackbox:", worst_blackbox, "Avg Whitebox:", avg_whitebox, "Worst Whitebox:", worst_whitebox)
 
     x_axis.append(fals/n)
-    y_axis.append(avg/trials*100)
+    y1_axis.append(avg_blackbox)
+    y2_axis.append(avg_whitebox)
+    y3_axis.append(worst_blackbox)
+    y4_axis.append(worst_whitebox)
 
 
-print(x_axis)
-print(y_axis)
+f.write("End: " + time.ctime(time.time()) + "\n")
+f.write("Proportion FP/TP\n")
+f.write(str(x_axis) + "\n")
+f.write("Avg Blackbox\n")
+f.write(str(y1_axis) + "\n")
+f.write("Avg Whitebox\n")
+f.write(str(y2_axis) + "\n")
+f.write("Worst Blackbox\n")
+f.write(str(y3_axis) + "\n")
+f.write("Worst Whitebox\n")
+f.write(str(y4_axis) + "\n")
+f.close()
 
 plt.xlabel('Ratio False positives/True positives')
 plt.ylabel('% of successfully obtained elements')
@@ -213,10 +367,18 @@ plt.title('m='+str(filter_size)+', '+'k='+str(k)+', '+'n='+str(n))
 plt.yticks([0,20,40,60,80,100])
 plt.ylim(bottom=0)
 plt.xlim(left=0)
-plt.xlim(right=4.25)
+plt.xlim(right=5.25)
 plt.grid()
-plt.plot(x_axis, y_axis)
-plt.savefig('initial_test_65536.png')
+lab1 = "Avg Blackbox"
+lab2 = "Avg Whitebox"
+lab3 = "Worst Blackbox"
+lab4 = "Worst Whitebox"
+plt.plot(x_axis, y1_axis, label=lab1)
+plt.plot(x_axis, y2_axis, label=lab2)
+plt.plot(x_axis, y3_axis, label=lab3)
+plt.plot(x_axis, y4_axis, label=lab4)
+plt.legend()
+plt.savefig(str(filter_size) + '_' + str(k) + '_' + str(n) + '.png')
 
 
 
