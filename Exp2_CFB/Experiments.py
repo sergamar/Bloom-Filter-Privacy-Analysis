@@ -14,7 +14,7 @@ import argparse
 # k = 4
 # n = 175
 # trials = 100
-max_val = 100000
+max_val = 1000000000
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-m", dest="m", type=int, help="Filter size (default 1024)", default=1024)
