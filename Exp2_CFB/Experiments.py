@@ -251,6 +251,7 @@ def test_element(element, bf, positives_set, removals):
     # If the only difference is the element itself, it is a true positive
     if len(diff) == 1:
         removals.add(element)
+        positives_set = positives_set - {element}
         return True
     # Otherwise, we see what happens if we add all the elements that disappeared
     # from the filter not taking the element itself into account
@@ -263,7 +264,9 @@ def test_element(element, bf, positives_set, removals):
             for e in list(diff):
                 bf.remove(e)
                 removals.add(e)
+                positives_set = positives_set - {e}
             removals.add(element)
+            positives_set = positives_set - {element}
             return True
         # If it is in the filter, we can't say it is a TP for sure
         for e in list(diff):
@@ -363,14 +366,19 @@ for fals in dots:
         while new_tp_found:
             new_tp_found = False
             removals = set()
+            all_positives_set_temp = all_positives_set.copy()
             for pos in list(all_positives_set):
                 # If we have already removed a tp or fp, we don't take it into account
                 if pos in removals:
                     continue
-                if test_element(pos, bf, all_positives_set, removals):
+                if test_element(pos, bf, all_positives_set_temp, removals):
                     found_tps.append(pos)
                     new_tp_found = True
             all_positives_set = all_positives_set - removals
+        for z in found_tps:
+            if z not in true_positives:
+                print("ERROR: Algorithm labeled FP as TP")
+                exit(0)
         # When we can't get new TP one by one, we proceed with pairs
         new_tp_found = True
         test = 0
