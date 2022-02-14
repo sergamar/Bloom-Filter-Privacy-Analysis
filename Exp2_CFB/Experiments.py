@@ -257,8 +257,16 @@ def test_element(element, bf, positives_set, removals):
     # from the filter not taking the element itself into account
     elif len(diff) > 1:
         diff = diff - {element}
+        temp_added = []
         for e in list(diff):
             bf.add(e)
+            temp_added.append(e)
+            # If it's not in the filter, then we have a hash collision
+            if not bf.check(e):
+                for r in temp_added:
+                    bf.remove(r)
+                bf.add(element)
+                return False
         # If x isn't in the filter, then it is a true positive
         if not bf.check(element):
             for e in list(diff):
@@ -375,13 +383,13 @@ for fals in dots:
                     found_tps.append(pos)
                     new_tp_found = True
             all_positives_set = all_positives_set - removals
+        # Check that we haven't labeled a FP as a TP
         for z in found_tps:
             if z not in true_positives:
                 print("ERROR: Algorithm labeled FP as TP")
                 exit(0)
         # When we can't get new TP one by one, we proceed with pairs
         new_tp_found = True
-        test = 0
         found_tps_with_pairs = found_tps.copy()
         while new_tp_found:
             new_tp_found = False
