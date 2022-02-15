@@ -314,8 +314,16 @@ def test_pairs(pos1, pos2, bf, positives_set, removals):
     elif len(diff) > 2:
         diff = diff - {pos1}
         diff = diff - {pos2}
+        temp_added = []
         for e in list(diff):
             bf.add(e)
+            temp_added.append(e)
+            if not bf.check(e):
+                for r in temp_added:
+                    bf.remove(r)
+                bf.add(pos1)
+                bf.add(pos2)
+                return False
         # If the pair isn't in the filter, then it is a true positive
         if not bf.check(pos1) and not bf.check(pos2):
             for e in list(diff):
