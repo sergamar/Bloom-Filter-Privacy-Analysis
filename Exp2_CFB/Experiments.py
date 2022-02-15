@@ -296,6 +296,10 @@ def test_element(element, bf, positives_set, removals):
 def test_pairs(pos1, pos2, bf, positives_set, removals):
     # We remove the pair of elements to be tested
     bf.remove(pos1)
+    # If pos2 is negative after we remove pos1 it is not useful for us
+    if not bf.check(pos2):
+        bf.add(pos1)
+        return False
     bf.remove(pos2)
     # And obtain the difference between the original positives and the new ones
     new_positives = set(find_p_set(bf, list(positives_set)))
@@ -382,11 +386,12 @@ for fals in dots:
                 if test_element(pos, bf, all_positives_set_temp, removals):
                     found_tps.append(pos)
                     new_tp_found = True
+                    all_positives_set_temp = all_positives_set - removals
             all_positives_set = all_positives_set - removals
         # Check that we haven't labeled a FP as a TP
         for z in found_tps:
             if z not in true_positives:
-                print("ERROR: Algorithm labeled FP as TP")
+                print("ERROR: Algorithm labeled FP as TP in simple filtering")
                 exit(0)
         # When we can't get new TP one by one, we proceed with pairs
         new_tp_found = True
@@ -394,15 +399,17 @@ for fals in dots:
         while new_tp_found:
             new_tp_found = False
             removals = set()
+            all_positives_set_temp = all_positives_set.copy()
             for pos1 in list(all_positives_set):
                 for pos2 in list(all_positives_set):
                     # If we have already removed a tp or fp, we don't take it into account
                     if pos1 in removals or pos2 in removals:
                         continue
-                    if test_pairs(pos1, pos2, bf, all_positives_set, removals):
+                    if test_pairs(pos1, pos2, bf, all_positives_set_temp, removals):
                         found_tps_with_pairs.append(pos1)
                         found_tps_with_pairs.append(pos2)
                         new_tp_found = True
+                        all_positives_set_temp = all_positives_set - removals
             all_positives_set = all_positives_set - removals
             # If we didn't find a new TP with pairs, we finish the extraction
             if new_tp_found == False:
@@ -412,15 +419,22 @@ for fals in dots:
             while new_tp_found:
                 new_tp_found = False
                 removals = set()
+                all_positives_set_temp = all_positives_set.copy()
                 for pos in list(all_positives_set):
                     # If we have already removed a tp or fp, we don't take it into account
                     if pos in removals:
                         continue
-                    if test_element(pos, bf, all_positives_set, removals):
+                    if test_element(pos, bf, all_positives_set_temp, removals):
                         found_tps_with_pairs.append(pos)
                         new_tp_found = True
+                        all_positives_set_temp = all_positives_set - removals
                 all_positives_set = all_positives_set - removals
                 iterations += 1
+            # Check that we haven't labeled a FP as a TP
+            for z in found_tps_with_pairs:
+                if z not in true_positives:
+                    print("ERROR: Algorithm labeled FP as TP in pair filtering")
+                    exit(0)
             # If we didn't find a new one, we finish
             if iterations == 1:
                 break
