@@ -21,11 +21,13 @@ parser.add_argument("-m", dest="m", type=int, help="Filter size (default 1024)",
 parser.add_argument("-n", dest="n", type=int, help="Number of true positives (default 256)", default=256)
 parser.add_argument("-t", dest="t", type=int, help="Number of iterations (default 100)", default=100)
 parser.add_argument("-k", dest="k", type=int, help="Number of hashes (default 3)", default=3)
+parser.add_argument("-p", dest="pairs", type=int, help="Carry pair extraction or not (default 0 - False). Any other number means True", default=0)
 args = parser.parse_args()
 filter_size = args.m
 n = args.n
 trials = args.t
 k = args.k
+pairs = args.pairs
 
 # Function to generate the random set of elements.
 # Current version uses strings
@@ -354,7 +356,7 @@ y6_axis = []
 
 dots = [(x*n)//10 for x in range(0,51)]
 
-f = open(str(filter_size) + '_' + str(k) + '_' + str(n) + '.results', 'w')
+f = open(str(filter_size) + '_' + str(k) + '_' + str(n) + '_fixed.results', 'w')
 f.write("Start: " + time.ctime(time.time()) + "\n")
 for fals in dots:
     avg_blackbox_ind = 0
@@ -401,53 +403,55 @@ for fals in dots:
             if z not in true_positives:
                 print("ERROR: Algorithm labeled FP as TP in simple filtering")
                 exit(0)
-        # When we can't get new TP one by one, we proceed with pairs
-        new_tp_found = True
-        found_tps_with_pairs = found_tps.copy()
-        while new_tp_found:
-            new_tp_found = False
-            removals = set()
-            all_positives_set_temp = all_positives_set.copy()
-            for pos1 in list(all_positives_set):
-                for pos2 in list(all_positives_set):
-                    # If we have already removed a tp or fp, we don't take it into account
-                    if pos1 in removals or pos2 in removals:
-                        continue
-                    if test_pairs(pos1, pos2, bf, all_positives_set_temp, removals):
-                        found_tps_with_pairs.append(pos1)
-                        found_tps_with_pairs.append(pos2)
-                        new_tp_found = True
-                        all_positives_set_temp = all_positives_set - removals
-            all_positives_set = all_positives_set - removals
-            # If we didn't find a new TP with pairs, we finish the extraction
-            if new_tp_found == False:
-                break
-            iterations = 0
-            # If we found a new TP, we try to extract new TPs with the usual method
+        # Check if we want to extract pairs
+        if pairs:
+            # When we can't get new TP one by one, we proceed with pairs
+            new_tp_found = True
+            found_tps_with_pairs = found_tps.copy()
             while new_tp_found:
                 new_tp_found = False
                 removals = set()
                 all_positives_set_temp = all_positives_set.copy()
-                for pos in list(all_positives_set):
-                    # If we have already removed a tp or fp, we don't take it into account
-                    if pos in removals:
-                        continue
-                    if test_element(pos, bf, all_positives_set_temp, removals):
-                        found_tps_with_pairs.append(pos)
-                        new_tp_found = True
-                        all_positives_set_temp = all_positives_set - removals
+                for pos1 in list(all_positives_set):
+                    for pos2 in list(all_positives_set):
+                        # If we have already removed a tp or fp, we don't take it into account
+                        if pos1 in removals or pos2 in removals:
+                            continue
+                        if test_pairs(pos1, pos2, bf, all_positives_set_temp, removals):
+                            found_tps_with_pairs.append(pos1)
+                            found_tps_with_pairs.append(pos2)
+                            new_tp_found = True
+                            all_positives_set_temp = all_positives_set - removals
                 all_positives_set = all_positives_set - removals
-                iterations += 1
-            # Check that we haven't labeled a FP as a TP
-            for z in found_tps_with_pairs:
-                if z not in true_positives:
-                    print("ERROR: Algorithm labeled FP as TP in pair filtering")
-                    exit(0)
-            # If we didn't find a new one, we finish
-            if iterations == 1:
-                break
-            # Otherwise, we run pairs again
-            new_tp_found = True
+                # If we didn't find a new TP with pairs, we finish the extraction
+                if new_tp_found == False:
+                    break
+                iterations = 0
+                # If we found a new TP, we try to extract new TPs with the usual method
+                while new_tp_found:
+                    new_tp_found = False
+                    removals = set()
+                    all_positives_set_temp = all_positives_set.copy()
+                    for pos in list(all_positives_set):
+                        # If we have already removed a tp or fp, we don't take it into account
+                        if pos in removals:
+                            continue
+                        if test_element(pos, bf, all_positives_set_temp, removals):
+                            found_tps_with_pairs.append(pos)
+                            new_tp_found = True
+                            all_positives_set_temp = all_positives_set - removals
+                    all_positives_set = all_positives_set - removals
+                    iterations += 1
+                # Check that we haven't labeled a FP as a TP
+                for z in found_tps_with_pairs:
+                    if z not in true_positives:
+                        print("ERROR: Algorithm labeled FP as TP in pair filtering")
+                        exit(0)
+                # If we didn't find a new one, we finish
+                if iterations == 1:
+                    break
+                # Otherwise, we run pairs again
+                new_tp_found = True
 
         # Record the results
         prct_obtained_ind = (len(found_tps)/len(true_positives)) * 100
@@ -455,10 +459,11 @@ for fals in dots:
         if prct_obtained_ind < worst_blackbox_ind:
             worst_blackbox_ind = prct_obtained_ind
 
-        prct_obtained_pairs = (len(found_tps_with_pairs)/len(true_positives)) * 100
-        avg_blackbox_pairs += prct_obtained_pairs/trials
-        if prct_obtained_pairs < worst_blackbox_pairs:
-            worst_blackbox_pairs = prct_obtained_pairs
+        if pairs:
+            prct_obtained_pairs = (len(found_tps_with_pairs)/len(true_positives)) * 100
+            avg_blackbox_pairs += prct_obtained_pairs/trials
+            if prct_obtained_pairs < worst_blackbox_pairs:
+                worst_blackbox_pairs = prct_obtained_pairs
 
         # Then, we carry out the whitebox analysis
         # Generate a new CFB with the same data
@@ -471,15 +476,20 @@ for fals in dots:
         if prct_obtained < worst_whitebox:
             worst_whitebox = prct_obtained
 
-    print("FPs:", fals, "Avg Whitebox:", avg_whitebox, "Worst Whitebox:", worst_whitebox, "Avg Blackbox Ind:", avg_blackbox_ind, "Worst Blackbox Ind:", worst_blackbox_ind, "Avg Blackbox Pairs:", avg_blackbox_pairs, "Worst Blackbox Pairs:", worst_blackbox_pairs)
+    if pairs:
+        print("FPs:", fals, "Avg Whitebox:", avg_whitebox, "Worst Whitebox:", worst_whitebox, "Avg Blackbox Ind:", avg_blackbox_ind, "Worst Blackbox Ind:", worst_blackbox_ind, "Avg Blackbox Pairs:", avg_blackbox_pairs, "Worst Blackbox Pairs:", worst_blackbox_pairs)
+    else:
+        print("FPs:", fals, "Avg Whitebox:", avg_whitebox, "Worst Whitebox:", worst_whitebox, "Avg Blackbox Ind:", avg_blackbox_ind, "Worst Blackbox Ind:", worst_blackbox_ind)
 
     x_axis.append(fals/n)
     y1_axis.append(avg_whitebox)
     y2_axis.append(avg_blackbox_ind)
-    y3_axis.append(avg_blackbox_pairs)
+    if pairs:
+        y3_axis.append(avg_blackbox_pairs)
     y4_axis.append(worst_whitebox)
     y5_axis.append(worst_blackbox_ind)
-    y6_axis.append(worst_blackbox_pairs)
+    if pairs:
+        y6_axis.append(worst_blackbox_pairs)
 
 
 f.write("End: " + time.ctime(time.time()) + "\n")
@@ -489,14 +499,16 @@ f.write("Avg Whitebox\n")
 f.write(str(y1_axis) + "\n")
 f.write("Avg Blackbox Ind\n")
 f.write(str(y2_axis) + "\n")
-f.write("Avg Blackbox Pairs\n")
-f.write(str(y3_axis) + "\n")
+if pairs:
+    f.write("Avg Blackbox Pairs\n")
+    f.write(str(y3_axis) + "\n")
 f.write("Worst Whitebox\n")
 f.write(str(y4_axis) + "\n")
 f.write("Worst Blackbox Ind\n")
 f.write(str(y5_axis) + "\n")
-f.write("Worst Blackbox Pairs\n")
-f.write(str(y6_axis) + "\n")
+if pairs:
+    f.write("Worst Blackbox Pairs\n")
+    f.write(str(y6_axis) + "\n")
 f.close()
 
 plt.xlabel('Ratio False positives/True positives')
@@ -515,12 +527,14 @@ lab5 = "Worst Blackbox Ind"
 lab6 = "Worst Blackbox Pairs"
 plt.plot(x_axis, y1_axis, label=lab1)
 plt.plot(x_axis, y2_axis, label=lab2)
-plt.plot(x_axis, y3_axis, label=lab3)
+if pairs:
+    plt.plot(x_axis, y3_axis, label=lab3)
 plt.plot(x_axis, y4_axis, label=lab4)
 plt.plot(x_axis, y5_axis, label=lab5)
-plt.plot(x_axis, y6_axis, label=lab6)
+if pairs:
+    plt.plot(x_axis, y6_axis, label=lab6)
 plt.legend()
-plt.savefig(str(filter_size) + '_' + str(k) + '_' + str(n) + '.png')
+plt.savefig(str(filter_size) + '_' + str(k) + '_' + str(n) + '_fixed.png')
 
 
 
