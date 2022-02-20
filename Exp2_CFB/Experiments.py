@@ -465,7 +465,7 @@ for fals in dots:
             worst_blackbox_ind = prct_obtained_ind
 
         if pairs:
-            prct_obtained_pairs = (len(set(found_tps_with_pairs))/len(true_positives)) * 100
+            prct_obtained_pairs = (len(found_tps_with_pairs)/len(true_positives)) * 100
             avg_blackbox_pairs += prct_obtained_pairs/trials
             if prct_obtained_pairs < worst_blackbox_pairs:
                 worst_blackbox_pairs = prct_obtained_pairs
@@ -479,7 +479,7 @@ for fals in dots:
         for posit in true_positives:
             bf.add(posit)
         found_tps = peeling(filter_size, k, bf, all_positives)
-        prct_obtained = (len(set(found_tps))/len(true_positives)) * 100
+        prct_obtained = (len(found_tps))/len(true_positives)) * 100
         avg_whitebox += prct_obtained/trials
         if prct_obtained < worst_whitebox:
             worst_whitebox = prct_obtained
