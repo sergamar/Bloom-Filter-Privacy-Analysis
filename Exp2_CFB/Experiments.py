@@ -2,6 +2,7 @@ import random
 import sys
 import getopt
 from CountingBloomFilter import CountingBloomFilter
+from CountingBloomFilterNoCol import CountingBloomFilterNoCol
 from GenericHashFunctionsSHA512 import GenericHashFunctionsSHA512
 import matplotlib
 matplotlib.use('Agg')
@@ -368,8 +369,12 @@ for fals in dots:
     for _ in range(trials):
         # First we proceed with the blackbox analysis
 
-        # Generate a standard bloom filter with the testing parameters
-        bf = CountingBloomFilter(filter_size, k)
+        # Generate a standard CBF with the testing parameters
+        # We create a no colision CBF if we are performing pair extraction
+        if pairs:
+            bf = CountingBloomFilterNoCol(filter_size, k)
+        else:
+            bf = CountingBloomFilter(filter_size, k)
 
         # Fill the filter with random elements
         true_positives = []
@@ -454,24 +459,27 @@ for fals in dots:
                 new_tp_found = True
 
         # Record the results
-        prct_obtained_ind = (len(found_tps)/len(true_positives)) * 100
+        prct_obtained_ind = (len(set(found_tps))/len(true_positives)) * 100
         avg_blackbox_ind += prct_obtained_ind/trials
         if prct_obtained_ind < worst_blackbox_ind:
             worst_blackbox_ind = prct_obtained_ind
 
         if pairs:
-            prct_obtained_pairs = (len(found_tps_with_pairs)/len(true_positives)) * 100
+            prct_obtained_pairs = (len(set(found_tps_with_pairs))/len(true_positives)) * 100
             avg_blackbox_pairs += prct_obtained_pairs/trials
             if prct_obtained_pairs < worst_blackbox_pairs:
                 worst_blackbox_pairs = prct_obtained_pairs
 
         # Then, we carry out the whitebox analysis
-        # Generate a new CFB with the same data
-        bf = CountingBloomFilter(filter_size, k)
+        # Generate a new CBF with the same data
+        if pairs:
+            bf = CountingBloomFilterNoCol(filter_size, k)
+        else:
+            bf = CountingBloomFilter(filter_size, k)
         for posit in true_positives:
             bf.add(posit)
         found_tps = peeling(filter_size, k, bf, all_positives)
-        prct_obtained = (len(found_tps)/len(true_positives)) * 100
+        prct_obtained = (len(set(found_tps))/len(true_positives)) * 100
         avg_whitebox += prct_obtained/trials
         if prct_obtained < worst_whitebox:
             worst_whitebox = prct_obtained
@@ -534,7 +542,7 @@ plt.plot(x_axis, y5_axis, label=lab5)
 if pairs:
     plt.plot(x_axis, y6_axis, label=lab6)
 plt.legend()
-plt.savefig(str(filter_size) + '_' + str(k) + '_' + str(n) + '_fixed.png')
+plt.savefig(str(filter_size) + '_' + str(k) + '_' + str(n) + '.png')
 
 
 
