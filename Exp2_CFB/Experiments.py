@@ -303,7 +303,13 @@ def test_pairs(pos1, pos2, bf, positives_set, removals):
     if not bf.check(pos2):
         bf.add(pos1)
         return False
+    # We also check the reciprocal
+    bf.add(pos1)
     bf.remove(pos2)
+    if not bf.check(pos1):
+        bf.add(pos2)
+        return False
+    bf.remove(pos1)
     # And obtain the difference between the original positives and the new ones
     new_positives = set(find_p_set(bf, list(positives_set)))
     diff = positives_set - new_positives
@@ -419,6 +425,8 @@ for fals in dots:
                 all_positives_set_temp = all_positives_set.copy()
                 for pos1 in list(all_positives_set):
                     for pos2 in list(all_positives_set):
+                        if pos1 == pos2:
+                            continue
                         # If we have already removed a tp or fp, we don't take it into account
                         if pos1 in removals or pos2 in removals:
                             continue
@@ -479,7 +487,7 @@ for fals in dots:
         for posit in true_positives:
             bf.add(posit)
         found_tps = peeling(filter_size, k, bf, all_positives)
-        prct_obtained = (len(found_tps))/len(true_positives)) * 100
+        prct_obtained = (len(found_tps)/len(true_positives)) * 100
         avg_whitebox += prct_obtained/trials
         if prct_obtained < worst_whitebox:
             worst_whitebox = prct_obtained
