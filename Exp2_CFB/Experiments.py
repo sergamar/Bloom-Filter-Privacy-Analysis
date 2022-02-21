@@ -310,6 +310,12 @@ def test_pairs(pos1, pos2, bf, positives_set, removals):
         bf.add(pos2)
         return False
     bf.remove(pos1)
+    # Check that both a now negatives
+    if  bf.check(pos1) or bf.check(pos2):
+        bf.add(pos1)
+        bf.add(pos2)
+        return False
+
     # And obtain the difference between the original positives and the new ones
     new_positives = set(find_p_set(bf, list(positives_set)))
     diff = positives_set - new_positives
@@ -467,7 +473,7 @@ for fals in dots:
                 new_tp_found = True
 
         # Record the results
-        prct_obtained_ind = (len(set(found_tps))/len(true_positives)) * 100
+        prct_obtained_ind = (len(found_tps)/len(true_positives)) * 100
         avg_blackbox_ind += prct_obtained_ind/trials
         if prct_obtained_ind < worst_blackbox_ind:
             worst_blackbox_ind = prct_obtained_ind
