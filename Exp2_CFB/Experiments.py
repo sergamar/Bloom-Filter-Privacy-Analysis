@@ -131,6 +131,7 @@ def find_p_set(bf, set):
     return p
 
 # Function that clears the element from its positions in T and also clears all the related false positives
+# m is the size of the filter
 # elements is the T array
 # positives is the list of elements to be removed
 # count_cbf is the list of counters from the CBF
@@ -138,7 +139,8 @@ def find_p_set(bf, set):
 # hashf is the hash function used in the CBF
 # k is the number of positions
 # is_positive indicates if it is a real positive (true) or a false positive (false)
-def clear_positions(elements, positives, count_cbf, count, hashf, k, is_positive):
+# nocol is a boolean indicating whether no collision is activated or not
+def clear_positions(m, elements, positives, count_cbf, count, hashf, k, is_positive, nocol):
     # Additional elements to be removed
     additional = list()
     # and iterate over them
@@ -149,9 +151,14 @@ def clear_positions(elements, positives, count_cbf, count, hashf, k, is_positive
         # get next element to be removed
         next_positive = positives[i]
         # for the k hash functions
+        hashes = []
         for j in range(k):
             # Get the position mapped for the element and the jth hash function
             jpos = hashf.getbit_idx(next_positive, j)
+            if nocol:
+                while jpos in hashes:
+                    jpos = (jpos + 1) % m
+                hashes.append(jpos)
             # Element might have been removed in a different level of recursion
             if elements[jpos].count(next_positive) == 0:
                 break
@@ -171,7 +178,7 @@ def clear_positions(elements, positives, count_cbf, count, hashf, k, is_positive
     # Recursive call to remove the false positive elements
     if len(additional) > 0:
         # Pass False as last parameter as they are false positives
-        clear_positions(elements, additional, count_cbf, count, hashf, k, False)
+        clear_positions(m, elements, additional, count_cbf, count, hashf, k, False, nocol)
 
     return
 
@@ -180,7 +187,8 @@ def clear_positions(elements, positives, count_cbf, count, hashf, k, is_positive
 # k is the number of hash functions
 # cbf is the Counting Bloom Filter
 # p is the P array with all the elements from the universe that returned positive from CBF
-def peeling(m, k, cbf, p):
+# nocol is a boolean indicating whether no collision is activated or not
+def peeling(m, k, cbf, p, nocol):
     # Retrieve the hash function used
     hashf = cbf.get_hash()
     # T array  with m positions to store the elements that are mapped to them
@@ -190,10 +198,16 @@ def peeling(m, k, cbf, p):
 
     # For all the positions in p
     for i in range(len(p)):
+        hashes = []
         # for the k hash functions
         for j in range(k):
             # Get the position mapped for the element p[i] and the jth hash function
             pos = hashf.getbit_idx(p[i], j)
+            # If no collision is activated, we recalculate the value of the hash
+            if nocol:
+                while pos in hashes:
+                    pos = (pos + 1) % m
+                hashes.append(pos)
             # Retrieve the position pos of the T array
             list_pos = elements[pos]
             # If no elements are assigned to that position, create a list and assign it
@@ -231,7 +245,7 @@ def peeling(m, k, cbf, p):
             removers = elements[i].copy()
             # call the function that clears the removers and related false positives
             # pass True as last parameter as they are real positives
-            clear_positions(elements, removers, counters, count, hashf, k, True)
+            clear_positions(m, elements, removers, counters, count, hashf, k, True, nocol)
         # if no new positives were found in the iteration, we should finish the algorithm
         if not found:
             break
@@ -369,7 +383,7 @@ y6_axis = []
 
 dots = [(x*n)//10 for x in range(0,51)]
 
-f = open(str(filter_size) + '_' + str(k) + '_' + str(n) + '_fixed.results', 'w')
+f = open(str(filter_size) + '_' + str(k) + '_' + str(n) + '.results', 'w')
 f.write("Start: " + time.ctime(time.time()) + "\n")
 for fals in dots:
     avg_blackbox_ind = 0
@@ -492,7 +506,7 @@ for fals in dots:
             bf = CountingBloomFilter(filter_size, k)
         for posit in true_positives:
             bf.add(posit)
-        found_tps = peeling(filter_size, k, bf, all_positives)
+        found_tps = peeling(filter_size, k, bf, all_positives, pairs)
         prct_obtained = (len(found_tps)/len(true_positives)) * 100
         avg_whitebox += prct_obtained/trials
         if prct_obtained < worst_whitebox:
