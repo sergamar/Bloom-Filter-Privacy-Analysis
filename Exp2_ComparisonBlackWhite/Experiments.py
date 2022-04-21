@@ -1,12 +1,8 @@
 import random
 import sys
 import getopt
-from CountingBloomFilter import CountingBloomFilter
 from CountingBloomFilterNoCol import CountingBloomFilterNoCol
 from GenericHashFunctionsSHA512 import GenericHashFunctionsSHA512
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import time
 import argparse
 
@@ -20,15 +16,14 @@ max_val = 1000000000
 parser = argparse.ArgumentParser()
 parser.add_argument("-m", dest="m", type=int, help="Filter size (default 1024)", default=1024)
 parser.add_argument("-n", dest="n", type=int, help="Number of true positives (default 256)", default=256)
-parser.add_argument("-t", dest="t", type=int, help="Number of iterations (default 100)", default=100)
+parser.add_argument("-t", dest="t", type=int, help="Number of iterations (default 10)", default=10)
 parser.add_argument("-k", dest="k", type=int, help="Number of hashes (default 3)", default=3)
-parser.add_argument("-p", dest="pairs", type=int, help="Carry pair extraction or not (default 0 - False). Any other number means True", default=0)
 args = parser.parse_args()
 filter_size = args.m
 n = args.n
 trials = args.t
 k = args.k
-pairs = args.pairs
+pairs = 1
 
 # Function to generate the random set of elements.
 # Current version uses strings
@@ -183,6 +178,7 @@ def clear_positions(m, elements, positives, count_cbf, count, hashf, k, is_posit
     return
 
 # Get the set of elements from the Universe (1 to maxVal) that may be included into the filter.
+# It won't extract elements in counters with 3 or more elements (for better comparison with black box analysis)
 # m is the number of positions (counters) of the CBF
 # k is the number of hash functions
 # cbf is the Counting Bloom Filter
@@ -235,7 +231,8 @@ def peeling(m, k, cbf, p, nocol):
                 continue
             # the position has values => it is not empty
             # we only want those positions where we have the same number of elements in T and CBF
-            if count[i] != counters[i]:
+            # and where that number is less than 3
+            if count[i] != counters[i] or counters[i] >= 3:
                 continue
             # we found at least one position
             found = True
@@ -383,8 +380,6 @@ y6_axis = []
 
 dots = [(x*n)//10 for x in range(0,51)]
 
-f = open(str(filter_size) + '_' + str(k) + '_' + str(n) + '.results', 'w')
-f.write("Start: " + time.ctime(time.time()) + "\n")
 for fals in dots:
     avg_blackbox_ind = 0
     worst_blackbox_ind = 100
@@ -396,11 +391,8 @@ for fals in dots:
         # First we proceed with the blackbox analysis
 
         # Generate a standard CBF with the testing parameters
-        # We create a no colision CBF if we are performing pair extraction
-        if pairs:
-            bf = CountingBloomFilterNoCol(filter_size, k)
-        else:
-            bf = CountingBloomFilter(filter_size, k)
+        # We create a no colision CBF since we are performing pair extraction
+        bf = CountingBloomFilterNoCol(filter_size, k)
 
         # Fill the filter with random elements
         true_positives = []
@@ -457,9 +449,10 @@ for fals in dots:
                             all_positives_set_temp = all_positives_set - removals
                 all_positives_set = all_positives_set - removals
                 # If we didn't find a new TP with pairs, we finish the extraction
-                if new_tp_found == False:
-                    break
+                if new_tp_found == True:
+                    continue
                 iterations = 0
+                new_tp_found = True
                 # If we found a new TP, we try to extract new TPs with the usual method
                 while new_tp_found:
                     new_tp_found = False
@@ -500,10 +493,7 @@ for fals in dots:
 
         # Then, we carry out the whitebox analysis
         # Generate a new CBF with the same data
-        if pairs:
-            bf = CountingBloomFilterNoCol(filter_size, k)
-        else:
-            bf = CountingBloomFilter(filter_size, k)
+        bf = CountingBloomFilterNoCol(filter_size, k)
         for posit in true_positives:
             bf.add(posit)
         found_tps = peeling(filter_size, k, bf, all_positives, pairs)
@@ -511,67 +501,26 @@ for fals in dots:
         avg_whitebox += prct_obtained/trials
         if prct_obtained < worst_whitebox:
             worst_whitebox = prct_obtained
+        if set(found_tps_with_pairs) != found_tps:
+            # print(set(found_tps_with_pairs))
+            # print(found_tps)
+            # print(len(found_tps_with_pairs))
+            # print(len(found_tps))
+            # print(found_tps - set(found_tps_with_pairs))
+            # for ee in list(found_tps - set(found_tps_with_pairs)):
+            #     print("-------------", ee, "-------------")
+            #     hashes = []
+            #     for i in range(bf.nhash):
+            #         idx = bf.hash.getbit_idx(ee, i)
+            #         while idx in hashes:
+            #             idx = (idx + 1) % m
+            #         print(idx)
+            print("ERROR: Different number of elements extracted")
+            exit(0)
 
-    if pairs:
-        print("FPs:", fals, "Avg Whitebox:", avg_whitebox, "Worst Whitebox:", worst_whitebox, "Avg Blackbox Ind:", avg_blackbox_ind, "Worst Blackbox Ind:", worst_blackbox_ind, "Avg Blackbox Pairs:", avg_blackbox_pairs, "Worst Blackbox Pairs:", worst_blackbox_pairs)
-    else:
-        print("FPs:", fals, "Avg Whitebox:", avg_whitebox, "Worst Whitebox:", worst_whitebox, "Avg Blackbox Ind:", avg_blackbox_ind, "Worst Blackbox Ind:", worst_blackbox_ind)
+    print("Tested with " + str(fals) + " false positives")
 
-    x_axis.append(fals/n)
-    y1_axis.append(avg_whitebox)
-    y2_axis.append(avg_blackbox_ind)
-    if pairs:
-        y3_axis.append(avg_blackbox_pairs)
-    y4_axis.append(worst_whitebox)
-    y5_axis.append(worst_blackbox_ind)
-    if pairs:
-        y6_axis.append(worst_blackbox_pairs)
-
-
-f.write("End: " + time.ctime(time.time()) + "\n")
-f.write("Proportion FP/TP\n")
-f.write(str(x_axis) + "\n")
-f.write("Avg Whitebox\n")
-f.write(str(y1_axis) + "\n")
-f.write("Avg Blackbox Ind\n")
-f.write(str(y2_axis) + "\n")
-if pairs:
-    f.write("Avg Blackbox Pairs\n")
-    f.write(str(y3_axis) + "\n")
-f.write("Worst Whitebox\n")
-f.write(str(y4_axis) + "\n")
-f.write("Worst Blackbox Ind\n")
-f.write(str(y5_axis) + "\n")
-if pairs:
-    f.write("Worst Blackbox Pairs\n")
-    f.write(str(y6_axis) + "\n")
-f.close()
-
-plt.xlabel('Ratio False positives/True positives')
-plt.ylabel('% of successfully obtained elements')
-plt.title('m='+str(filter_size)+', '+'k='+str(k)+', '+'n='+str(n))
-plt.yticks([0,20,40,60,80,100])
-plt.ylim(bottom=0)
-plt.xlim(left=0)
-plt.xlim(right=5.25)
-plt.grid()
-lab1 = "Avg Whitebox"
-lab2 = "Avg Blackbox Ind"
-lab3 = "Avg Blackbox Pairs"
-lab4 = "Worst Whitebox"
-lab5 = "Worst Blackbox Ind"
-lab6 = "Worst Blackbox Pairs"
-plt.plot(x_axis, y1_axis, label=lab1)
-plt.plot(x_axis, y2_axis, label=lab2)
-if pairs:
-    plt.plot(x_axis, y3_axis, label=lab3)
-plt.plot(x_axis, y4_axis, label=lab4)
-plt.plot(x_axis, y5_axis, label=lab5)
-if pairs:
-    plt.plot(x_axis, y6_axis, label=lab6)
-plt.legend()
-plt.savefig(str(filter_size) + '_' + str(k) + '_' + str(n) + '.png')
-
+print("Blackbox with pairs and whitebox limited to two elements have extracted the same elements.")
 
 
 
