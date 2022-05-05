@@ -1,7 +1,7 @@
 # Black-box Privacy Analysis of Counting Bloom Filters
 Repository that contains all the code related to the author's Master Thesis for the Master in Cybersecurity UC3M. The results are also part of the paper:
 
-Sergio Galán, Pedro Reviriego, Stefan Walzer, Alfonso Sánchez-Macian, Shanshan Liu and Fabrizio Lombardi, "On the Privacy of Counting Bloom Filters for Black-box Attackers", submitted TBD
+Sergio Galán, Pedro Reviriego, Stefan Walzer, Alfonso Sánchez-Macian, Shanshan Liu and Fabrizio Lombardi, "On the Privacy of Counting Bloom Filters for Black-box Attackers", submitted to IEEE Transactions on Dependable and Secure Computing.
 
 The code related to Counting Bloom Filters is based on the code from Alfonso Sánchez-Macián (https://github.com/amacian/invertCBF). It has been modified to implement a regular Bloom Filter and a Counting Bloom Filter without collisions.
 
